@@ -197,8 +197,20 @@ void EspWebUI::setupRoutes() {
 
   // Route für OTA-Updates
   server.on(
-      "/update", HTTP_POST, [this](AsyncWebServerRequest *request) {},
+      "/update", HTTP_POST,
+      [this](AsyncWebServerRequest *request) {
+        if (!isAuthenticated(request)) {
+          request->send(401, "text/plain", "not authenticated");
+        }
+      },
       [this](AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data, size_t len, bool final) {
+        // body/upload handler runs per chunk, before the request handler
+        // above returns its response - flashing must not proceed on an
+        // unauthenticated request even if the final response above hasn't
+        // been sent yet.
+        if (!isAuthenticated(request)) {
+          return;
+        }
         this->handleDoUpdate(request, filename, index, data, len, final);
       });
 }
