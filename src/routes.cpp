@@ -127,16 +127,44 @@ void EspWebUI::setupRoutes() {
   server.on("/favicon.svg", HTTP_GET, [this](AsyncWebServerRequest *request) { request->send(200, "image/svg+xml", faviconSvgPtr); });
 
   // config.json download
-  server.on("/config-download", HTTP_GET,
-            [this](AsyncWebServerRequest *request) { request->send(LittleFS, "/config.json", "application/octet-stream"); });
+  server.on("/config-download", HTTP_GET, [this](AsyncWebServerRequest *request) {
+    // config.json holds the device's WiFi/MQTT/auth credentials - unlike
+    // the static UI assets above, this must never be reachable without a
+    // valid session, regardless of the checkAuth flag those use.
+    if (!isAuthenticated(request)) {
+      request->redirect("/login");
+      return;
+    }
+    request->send(LittleFS, "/config.json", "application/octet-stream");
+  });
 
   // send config.json file
-  server.on("/config.json", HTTP_GET, [this](AsyncWebServerRequest *request) { request->send(LittleFS, "/config.json", "application/json"); });
+  server.on("/config.json", HTTP_GET, [this](AsyncWebServerRequest *request) {
+    if (!isAuthenticated(request)) {
+      request->redirect("/login");
+      return;
+    }
+    request->send(LittleFS, "/config.json", "application/json");
+  });
 
   // config.json upload
   server.on(
-      "/config-upload", HTTP_POST, [this](AsyncWebServerRequest *request) { request->send(200, "text/plain", "upload done!"); },
+      "/config-upload", HTTP_POST,
+      [this](AsyncWebServerRequest *request) {
+        if (!isAuthenticated(request)) {
+          request->send(401, "application/json", "{\"success\": false, \"error\": \"not_authenticated\"}");
+          return;
+        }
+        request->send(200, "text/plain", "upload done!");
+      },
       [this](AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data, size_t len, bool final) {
+        // upload_handler runs once per received chunk, before the request
+        // handler above returns its response - re-check here too so an
+        // unauthenticated request can't overwrite config.json via chunks
+        // even though the final response above will correctly report 401.
+        if (!isAuthenticated(request)) {
+          return;
+        }
         static File uploadFile;
         const String targetFilename = "/config.json"; // fix to config.json
 
