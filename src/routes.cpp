@@ -166,12 +166,19 @@ void EspWebUI::setupRoutes() {
           return;
         }
         static File uploadFile;
-        const String targetFilename = "/config.json"; // fix to config.json
+        const String targetFilename = "/config.json";     // fix to config.json
+        const String tempFilename = "/config.json.upload"; // staged until complete
 
+        // Upload into a temporary file and only move it into place once the
+        // last chunk has arrived. Opening the real config.json with "w"
+        // truncated it immediately, so a browser tab closed mid-upload - or a
+        // dropped WiFi link, since "final" then never fires - left a truncated
+        // JSON prefix behind. On the next boot the device failed to parse its
+        // own config and came up as an access point with no credentials.
         if (!index) { // firs call for upload
           callbackUpload(UPLOAD_BEGIN, "uploading...");
           ESP_LOGI(TAG, "Upload Start: %s\n", filename.c_str());
-          uploadFile = LittleFS.open(targetFilename, "w"); // fix to config.json
+          uploadFile = LittleFS.open(tempFilename, "w");
 
           if (!uploadFile) {
             callbackUpload(UPLOAD_ERROR, "error on file close!");
@@ -187,8 +194,14 @@ void EspWebUI::setupRoutes() {
         if (final) {
           if (uploadFile) {
             uploadFile.close();
-            ESP_LOGI(TAG, "UploadEnd: %s, %u B\n", filename.c_str(), index + len);
-            callbackUpload(UPLOAD_FINISH, "upload done!");
+            LittleFS.remove(targetFilename); // rename() cannot overwrite on LittleFS
+            if (LittleFS.rename(tempFilename, targetFilename)) {
+              ESP_LOGI(TAG, "UploadEnd: %s, %u B\n", filename.c_str(), index + len);
+              callbackUpload(UPLOAD_FINISH, "upload done!");
+            } else {
+              ESP_LOGE(TAG, "failed to move uploaded config into place");
+              callbackUpload(UPLOAD_ERROR, "error on file close!");
+            }
           } else {
             callbackUpload(UPLOAD_ERROR, "error on file close!");
           }
