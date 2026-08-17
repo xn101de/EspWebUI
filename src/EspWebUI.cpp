@@ -21,7 +21,12 @@ void EspWebUI::begin() {
   setupRoutes();
 
   server.addHandler(&ws).addMiddleware([this](AsyncWebServerRequest *request, ArMiddlewareNext next) {
-    if (ws.count() >= WEBUI_MAX_WS_CLIENT) {
+    if (!isAuthenticated(request)) {
+      // the WS upgrade request carries the same session cookie as any other
+      // request - reject it here so an unauthenticated client can never open
+      // a socket at all, instead of trying to gate every message afterwards.
+      request->send(401, "text/plain", "not authenticated");
+    } else if (ws.count() >= WEBUI_MAX_WS_CLIENT) {
       // too many clients - answer back immediately and stop processing next middlewares and handler
       request->send(429, "text/plain", "no more client connection allowed");
     } else {
