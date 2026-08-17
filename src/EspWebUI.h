@@ -117,8 +117,14 @@ private:
   void (*callbackWebElement)(const char *elementID, const char *elementValue) = nullptr;
 
   struct EspWebUIConfig {
-    char username[32];
-    char password[32];
+    // Sized to match what consumers actually store. At 32 bytes a 40-character
+    // passphrase was silently truncated to 31 here, so the web login accepted
+    // its first 31 characters while the consumer's own checks (e.g. a telnet
+    // console sharing the same credential) still demanded all 40 - the same
+    // password behaving differently, and weakest exactly for someone who
+    // deliberately chose a long one.
+    char username[64];
+    char password[64];
     bool enableAuth;
   };
 
