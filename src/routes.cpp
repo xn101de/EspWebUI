@@ -67,8 +67,8 @@ void EspWebUI::setupRoutes() {
       String username = request->getParam("username", true)->value();
       String password = request->getParam("password", true)->value();
 
-      bool usernameValid = (username == String(config.username) || username == "esp");
-      bool passwordValid = (password == String(config.password) || password == "xxx");
+      bool usernameValid = (username == String(config.username));
+      bool passwordValid = (password == String(config.password));
 
       AsyncResponseStream *response = request->beginResponseStream("application/json");
 
